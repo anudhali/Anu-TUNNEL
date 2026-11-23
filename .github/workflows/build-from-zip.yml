@@ -97,6 +97,21 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
           gomobile init
 
+      - name: Ensure local DNSTT AAR is a direct dependency
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("anu_tunnel/app/build.gradle")
+          s = p.read_text()
+          s = s.replace("implementation fileTree(dir: 'libs', include: ['*.aar'])", "implementation files('libs/dnstt.aar')")
+          if "implementation files('libs/dnstt.aar')" not in s:
+              raise SystemExit("Could not configure DNSTT AAR dependency")
+          p.write_text(s)
+          print("Configured explicit local DNSTT AAR dependency")
+          PY
+
       - name: Patch DNSTT binding package usage
         shell: bash
         run: |
@@ -135,6 +150,17 @@ jobs:
           gomobile bind -v -androidapi 24 -javapkg=go.dnsttbridge -target=android/arm64 -o "$GITHUB_WORKSPACE/anu_tunnel/app/libs/dnstt.aar" ./dnsttbridge
           test -s "$GITHUB_WORKSPACE/anu_tunnel/app/libs/dnstt.aar"
 
+      - name: Inspect generated DNSTT Java bindings
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          AAR="$GITHUB_WORKSPACE/anu_tunnel/app/libs/dnstt.aar"
+          test -s "$AAR"
+          unzip -p "$AAR" classes.jar > "$RUNNER_TEMP/dnstt-classes.jar"
+          echo "Generated DNSTT classes:"
+          jar tf "$RUNNER_TEMP/dnstt-classes.jar" | sort | tee "$RUNNER_TEMP/dnstt-classes.txt"
+          echo "Generated package declarations:"
+          unzip -l "$AAR"
       - name: Build Hev ARM64 JNI library
         shell: bash
         run: |

@@ -105,6 +105,20 @@ jobs:
           print("Validated and extracted the four v1.6 engine integration sources")
           PY
           python3 ci/apply_engine_v1_6.py anu_tunnel
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("anu_tunnel/app/src/main/java/com/anutunnel/app/AnuVpnService.kt")
+          source = p.read_text()
+          old = '.addDnsServer("198.18.0.2")'
+          new = '.addDnsServer("10.111.0.2")'
+          if old in source:
+              source = source.replace(old, new, 1)
+              p.write_text(source)
+          elif new not in source:
+              raise SystemExit("UDP Gateway DNS target does not match BadVPN --netif-ipaddr")
+          print("Aligned Android DNS target with BadVPN TUN address for transparent UDPGW DNS")
+          PY
+          grep -q '.addDnsServer("10.111.0.2")' anu_tunnel/app/src/main/java/com/anutunnel/app/AnuVpnService.kt
           python3 anu_tunnel/tools/verify_source.py
           grep -q "versionName '1.6.0'" anu_tunnel/app/build.gradle
           mkdir -p patched-source-v1.6.0

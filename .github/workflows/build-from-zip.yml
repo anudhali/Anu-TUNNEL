@@ -147,7 +147,7 @@ jobs:
           cp "$GITHUB_WORKSPACE/anu_tunnel/tools/native/dnsttbridge/bridge.go" dnsttbridge/bridge.go
           gofmt -w dnsttbridge/bridge.go
           mkdir -p "$GITHUB_WORKSPACE/anu_tunnel/app/libs"
-          gomobile bind -v -androidapi 24 -javapkg=go.dnsttbridge -target=android/arm64 -o "$GITHUB_WORKSPACE/anu_tunnel/app/libs/dnstt.aar" ./dnsttbridge
+          gomobile bind -v -androidapi 24 -javapkg=go -target=android/arm64 -o "$GITHUB_WORKSPACE/anu_tunnel/app/libs/dnstt.aar" ./dnsttbridge
           test -s "$GITHUB_WORKSPACE/anu_tunnel/app/libs/dnstt.aar"
 
       - name: Inspect generated DNSTT Java bindings

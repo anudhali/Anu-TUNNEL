@@ -73,7 +73,37 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          base64 -d ci/v1.6-engine-sources.tar.gz.b64 | tar -xz -C "$GITHUB_WORKSPACE"
+          python3 - <<'PY'
+          import base64, gzip, io, tarfile
+          from pathlib import Path
+          encoded = Path("ci/v1.6-engine-sources.tar.gz.b64").read_text().strip()
+          required = {"ci/apply_engine_v1_6.py", "ci/prepare_badvpn.py", "ci/build_badvpn_android.sh", "ci/BADVPN-COPYING.txt"}
+          candidates = [encoded]
+          # Recover a single accidental extra Base64 character only when the candidate
+          # decompresses and contains the exact four expected, safe tar entries.
+          if len(encoded) % 4:
+              candidates = (encoded[:i] + encoded[i+1:] for i in range(len(encoded)))
+          recovered = None
+          for candidate in candidates:
+              try:
+                  compressed = base64.b64decode(candidate, validate=True)
+                  archive = gzip.decompress(compressed)
+                  with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as tf:
+                      names = {m.name for m in tf.getmembers() if m.isfile()}
+                      if not required.issubset(names):
+                          continue
+                      if any(m.name.startswith("/") or ".." in Path(m.name).parts for m in tf.getmembers()):
+                          continue
+                      recovered = archive
+                      break
+              except Exception:
+                  continue
+          if recovered is None:
+              raise SystemExit("v1.6 engine source archive failed Base64/gzip/tar integrity checks")
+          with tarfile.open(fileobj=io.BytesIO(recovered), mode="r:") as tf:
+              tf.extractall(path=".", members=[m for m in tf.getmembers() if m.name in required])
+          print("Validated and extracted the four v1.6 engine integration sources")
+          PY
           python3 ci/apply_engine_v1_6.py anu_tunnel
           python3 anu_tunnel/tools/verify_source.py
           grep -q "versionName '1.6.0'" anu_tunnel/app/build.gradle

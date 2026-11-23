@@ -22,21 +22,17 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          ZIP="Anu_TUNNEL_v1.2.9_GitHub_Actions_Build.zip"
+          ZIP="Anu_TUNNEL_v1.4.0_build.zip"
           test -s "$ZIP"
           unzip -q "$ZIP" -d "$GITHUB_WORKSPACE"
           test -f "$GITHUB_WORKSPACE/anu_tunnel/app/build.gradle"
 
-      - name: Apply v1.3.0 feature implementation
+      - name: Verify v1.4.0 source
         shell: bash
         run: |
           set -Eeuo pipefail
-          mkdir -p ci
-          base64 -d ci/anu_tunnel_v1.3.0.patch.gz.b64 | gzip -d > "$RUNNER_TEMP/anu_tunnel_v1.3.0.patch"
-          git apply --check "$RUNNER_TEMP/anu_tunnel_v1.3.0.patch"
-          git apply "$RUNNER_TEMP/anu_tunnel_v1.3.0.patch"
           python3 anu_tunnel/tools/verify_source.py
-          echo "Applied and verified Anu TUNNEL v1.3.0 source"
+          echo "Verified uploaded Anu TUNNEL v1.4.0 source"
 
       - name: Align Java and Kotlin JVM targets
         shell: bash

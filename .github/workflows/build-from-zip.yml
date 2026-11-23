@@ -97,6 +97,29 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
           gomobile init
 
+      - name: Patch DNSTT binding package usage
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("anu_tunnel/app/src/main/java/com/anutunnel/app/AnuVpnService.kt")
+          s = p.read_text()
+          old = """            dnstt = Dnsttbridge.newClient(dnsEndpoint, domain, key, "127.0.0.1:7000")
+                      dnstt!!.start()
+                      ensureNotStopping()
+                      check(dnstt!!.isRunning) { "DNSTT native client did not start" }"""
+          new = """            val client = Dnsttbridge.newClient(dnsEndpoint, domain, key, "127.0.0.1:7000")
+                      dnstt = client
+                      client.start()
+                      ensureNotStopping()
+                      check(client.isRunning) { "DNSTT native client did not start" }"""
+          if old not in s:
+              raise SystemExit("DNSTT client initialization block not found; refusing unsafe patch")
+          p.write_text(s.replace(old, new, 1))
+          print("DNSTT client initialization patched")
+          PY
+
       - name: Build DNSTT Android AAR
         shell: bash
         run: |
@@ -109,7 +132,7 @@ jobs:
           cp "$GITHUB_WORKSPACE/anu_tunnel/tools/native/dnsttbridge/bridge.go" dnsttbridge/bridge.go
           gofmt -w dnsttbridge/bridge.go
           mkdir -p "$GITHUB_WORKSPACE/anu_tunnel/app/libs"
-          gomobile bind -v -androidapi 24 -target=android/arm64 -o "$GITHUB_WORKSPACE/anu_tunnel/app/libs/dnstt.aar" ./dnsttbridge
+          gomobile bind -v -androidapi 24 -javapkg=go.dnsttbridge -target=android/arm64 -o "$GITHUB_WORKSPACE/anu_tunnel/app/libs/dnstt.aar" ./dnsttbridge
           test -s "$GITHUB_WORKSPACE/anu_tunnel/app/libs/dnstt.aar"
 
       - name: Build Hev ARM64 JNI library

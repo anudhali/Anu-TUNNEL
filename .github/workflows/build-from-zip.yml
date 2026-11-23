@@ -1,0 +1,127 @@
+name: Anu TUNNEL Build from Uploaded ZIP
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract uploaded project
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ZIP="Anu_TUNNEL_v1.2.9_GitHub_Actions_Build.zip"
+          test -s "$ZIP"
+          unzip -q "$ZIP" -d "$GITHUB_WORKSPACE"
+          test -f "$GITHUB_WORKSPACE/anu_tunnel/app/build.gradle"
+          echo "PROJECT_DIR=$GITHUB_WORKSPACE/anu_tunnel" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.4'
+          cache: false
+
+      - name: Set up Android SDK and NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK and NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;27.3.13750724"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.3.13750724" >> "$GITHUB_ENV"
+
+      - name: Install pinned gomobile and gobind
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          export GOTOOLCHAIN=local
+          export GOMAXPROCS=2
+          MOBILE_VERSION='v0.0.0-20260112195712-5b9ecdfb8721'
+          go install "golang.org/x/mobile/cmd/gobind@$MOBILE_VERSION"
+          MODULE_DIR="$(go env GOPATH)/pkg/mod/golang.org/x/mobile@$MOBILE_VERSION"
+          PATCH_DIR="$RUNNER_TEMP/mobile-patched"
+          test -f "$MODULE_DIR/cmd/gomobile/init.go"
+          mkdir -p "$PATCH_DIR"
+          cp -a "$MODULE_DIR/." "$PATCH_DIR/"
+          chmod -R u+rwX "$PATCH_DIR"
+          sed -i "s|golang.org/x/mobile/cmd/gobind@latest|golang.org/x/mobile/cmd/gobind@$MOBILE_VERSION|g" "$PATCH_DIR/cmd/gomobile/init.go"
+          ! grep -q 'gobind@latest' "$PATCH_DIR/cmd/gomobile/init.go"
+          (cd "$PATCH_DIR" && go build -o "$(go env GOPATH)/bin/gomobile" ./cmd/gomobile)
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          gomobile init
+
+      - name: Build DNSTT Android AAR
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/anu-native"
+          mkdir -p "$WORK"
+          git clone --depth 1 https://github.com/dnstt-xyz/dnstt_xyz_app.git "$WORK/dnstt_xyz_app"
+          cd "$WORK/dnstt_xyz_app/go_src"
+          mkdir -p dnsttbridge
+          cp "$PROJECT_DIR/tools/native/dnsttbridge/bridge.go" dnsttbridge/bridge.go
+          gofmt -w dnsttbridge/bridge.go
+          mkdir -p "$PROJECT_DIR/app/libs"
+          gomobile bind -v -androidapi 24 -target=android/arm64 -o "$PROJECT_DIR/app/libs/dnstt.aar" ./dnsttbridge
+          test -s "$PROJECT_DIR/app/libs/dnstt.aar"
+
+      - name: Build Hev ARM64 JNI library
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/anu-native"
+          git clone --depth 1 --recursive https://github.com/heiher/hev-socks5-tunnel.git "$WORK/hev-socks5-tunnel"
+          cp "$PROJECT_DIR/Application.mk" "$WORK/hev-socks5-tunnel/Application.mk"
+          "$ANDROID_NDK_HOME/ndk-build" NDK_PROJECT_PATH="$WORK/hev-socks5-tunnel" APP_BUILD_SCRIPT="$WORK/hev-socks5-tunnel/Android.mk" APP_ABI=arm64-v8a APP_PLATFORM=android-24 NDK_LIBS_OUT="$PROJECT_DIR/app/src/main/jniLibs" NDK_OUT="$WORK/hev-obj"
+          test -s "$PROJECT_DIR/app/src/main/jniLibs/arm64-v8a/libhev-socks5-tunnel.so"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build debug APK
+        shell: bash
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+        working-directory: anu_tunnel
+
+      - name: Verify and package outputs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          test -s app/libs/dnstt.aar
+          test -s app/src/main/jniLibs/arm64-v8a/libhev-socks5-tunnel.so
+          mkdir -p release
+          cp "$APK" release/Anu_TUNNEL-debug.apk
+          cp app/libs/dnstt.aar release/
+          cp app/src/main/jniLibs/arm64-v8a/libhev-socks5-tunnel.so release/
+          sha256sum release/* | tee release/SHA256SUMS.txt
+        working-directory: anu_tunnel
+
+      - name: Upload APK and native artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Anu-TUNNEL-Android-ARM64
+          path: anu_tunnel/release/*
+          if-no-files-found: error
+          retention-days: 14

@@ -116,7 +116,7 @@ new_home = r'''    private fun showHome() {
     }
 
 '''
-new_home = new_home.replace(r"\\${", "${")
+new_home = new_home.replace(r"\${", "${")
 s = s[:start] + new_home + s[end:]
 s = s.replace("Anu TUNNEL v1.3.0", "Anu TUNNEL v1.5.0")
 p.write_text(s)

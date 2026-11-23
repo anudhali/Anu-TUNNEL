@@ -27,6 +27,23 @@ jobs:
           unzip -q "$ZIP" -d "$GITHUB_WORKSPACE"
           test -f "$GITHUB_WORKSPACE/anu_tunnel/app/build.gradle"
 
+      - name: Export source for review
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p review-source
+          cp -a anu_tunnel/app/src/main/java review-source/
+          cp -a anu_tunnel/app/src/main/AndroidManifest.xml review-source/ 2>/dev/null || true
+          cp -a anu_tunnel/app/build.gradle review-source/
+          cp -a anu_tunnel/tools review-source/ 2>/dev/null || true
+          zip -qr review-source.zip review-source
+      - name: Upload review source
+        uses: actions/upload-artifact@v4
+        with:
+          name: Anu-TUNNEL-review-source
+          path: review-source.zip
+          retention-days: 7
+
       - name: Verify v1.4.0 source
         shell: bash
         run: |

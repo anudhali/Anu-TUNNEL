@@ -126,3 +126,63 @@ t=t.replace("An SSH CONNECT probe confirms only that the TCP port is reachable; 
             "The app reports three separate stages: TCP endpoint reachable, BadVPN SOCKS stream established, and a valid UDPGW reply received. Only the last stage verifies an end-to-end UDP response.")
 p.write_text(t)
 print("PASS: native UDPGW transport/protocol state and provider-specific port configuration added")
+
+
+# Persist explicit confirmation of the provider-supplied port.
+patch("app/src/main/java/com/anutunnel/app/TunnelConfig.kt",
+ '    var udpgwPort: Int = 0,\n    var isDefault: Boolean = false',
+ '    var udpgwPort: Int = 0,\n    var udpgwPortConfigured: Boolean = false,\n    var isDefault: Boolean = false',
+ "explicit provider port confirmation field")
+patch("app/src/main/java/com/anutunnel/app/TunnelConfig.kt",
+ 'put("udpgwPort", udpgwPort)',
+ 'put("udpgwPort", udpgwPort); put("udpgwPortConfigured", udpgwPortConfigured)',
+ "persist provider port confirmation")
+patch("app/src/main/java/com/anutunnel/app/TunnelConfig.kt",
+ 'udpgwPort = o.optInt("udpgwPort", 0),',
+ 'udpgwPort = if (o.optBoolean("udpgwPortConfigured", false)) o.optInt("udpgwPort", 0) else 0,\n            udpgwPortConfigured = o.optBoolean("udpgwPortConfigured", false),',
+ "migrate old profiles to unconfirmed port")
+patch("app/src/main/java/com/anutunnel/app/MainActivity.kt",
+ 'add("udpgw", "Provider UDPGW TCP Port", if (config.udpgwPort in 1..65535) config.udpgwPort.toString() else "", "Ask provider; no universal default")',
+ 'add("udpgw", "Provider UDPGW TCP Port", if (config.udpgwPortConfigured) config.udpgwPort.toString() else "", "Ask provider; no universal default")\n        c.addView(label("This is the port on the SSH server running badvpn-udpgw. 7300 is not assumed. Confirm it with your provider.", 12f))',
+ "provider port confirmation UI")
+patch("app/src/main/java/com/anutunnel/app/MainActivity.kt",
+ '            config.udpgwPort = udpgwPort',
+ '            config.udpgwPort = udpgwPort\n            config.udpgwPortConfigured = true',
+ "save confirmed provider port")
+patch("app/src/main/java/com/anutunnel/app/MainActivity.kt",
+ '    private fun requestVpnFor(config: TunnelConfig) {\n        val credentials = config.account.split(":", limit = 2)',
+ '    private fun requestVpnFor(config: TunnelConfig) {\n        if (!config.udpgwPortConfigured || config.udpgwPort !in 1..65535) {\n            toast("Ask your SSH provider for the exact BadVPN UDPGW TCP port, then save it in this profile.")\n            showEditor(config)\n            return\n        }\n        val credentials = config.account.split(":", limit = 2)',
+ "block unconfirmed provider port")
+patch("app/src/main/java/com/anutunnel/app/MainActivity.kt",
+ 'item.addView(label("\${config.connectionType}\\nSSH: $safeAccount\\nDNS: \${config.udpDns}\\nSNI: \${config.serverName}\\nUDP Gateway: \${config.udpgwPort}", 12f))',
+ 'item.addView(label("\${config.connectionType}\\nSSH: $safeAccount\\nDNS: \${config.udpDns}\\nSNI: \${config.serverName}\\nProvider UDPGW TCP Port: \${if (config.udpgwPortConfigured) config.udpgwPort.toString() else "Not configured"}", 12f))',
+ "show confirmed port status")
+
+# Reset native relay state on each fresh engine session.
+patch("tools/native/badvpn/prepare.py",
+ '    anutunnel_engine_running = 0;\\n    pthread_mutex_unlock(&g_lock);',
+ '    anutunnel_engine_running = 0;\\n    anutunnel_udpgw_state = 0;\\n    pthread_mutex_unlock(&g_lock);',
+ "reset native UDPGW state on reconnect")
+p=root/"tools/native/badvpn/prepare.py"
+t=p.read_text()
+needle='''        ss = ss.replace('#include <misc/debug.h>', '#include <signal.h>\\nextern volatile sig_atomic_t anutunnel_udpgw_state;\\n\\n#include <misc/debug.h>', 1)'''
+extra=needle+'''
+        ss = ss.replace('static void try_connect (SocksUdpGwClient *o)\\\\n{\\\\n    ASSERT(!o->have_socks)',
+                        'static void try_connect (SocksUdpGwClient *o)\\\\n{\\\\n    anutunnel_udpgw_state = 0;\\\\n    ASSERT(!o->have_socks)', 1)'''
+if needle not in t: raise SystemExit("native retry state anchor missing")
+p.write_text(t.replace(needle,extra,1))
+
+patch("app/build.gradle", "versionCode 13", "versionCode 14", "v1.7 version code")
+patch("app/build.gradle", "versionName '1.6.0'", "versionName '1.7.0'", "v1.7 version name")
+
+p=root/"BUILD_STATUS.md"; t=p.read_text()
+t += """
+\n## v1.7.0 UDPGW validation and provider-port handling
+- New profiles do not assume port 7300. A provider-supplied UDPGW TCP port must be explicitly entered and saved.
+- Existing profiles from older versions are migrated as unconfirmed; their previous 7300 value is not trusted automatically.
+- Native status distinguishes the UDPGW SOCKS/TCP stream from a valid UDPGW response packet. Only a valid decoded reply with a matching connection ID and peer marks UDP relay verified.
+- The BadVPN UDPGW SOCKS state is reset on each reconnect to avoid carrying a prior session's success into a new connection.
+- The app still cannot install or configure the provider-side badvpn-udpgw daemon. The provider must run a compatible service on SSH-host loopback at the confirmed port.
+"""
+p.write_text(t)
+print("PASS: provider port confirmation, native relay-state reset and v1.7.0 version applied")

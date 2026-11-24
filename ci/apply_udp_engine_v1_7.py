@@ -155,8 +155,8 @@ patch("app/src/main/java/com/anutunnel/app/MainActivity.kt",
  "block unconfirmed provider port")
 # Reset native relay state on each fresh engine session.
 patch("tools/native/badvpn/prepare.py",
- '    anutunnel_engine_running = 0;\\n    pthread_mutex_unlock(&g_lock);',
- '    anutunnel_engine_running = 0;\\n    anutunnel_udpgw_state = 0;\\n    pthread_mutex_unlock(&g_lock);',
+ '    anutunnel_engine_running = 0;\n    pthread_mutex_unlock(&g_lock);',
+ '    anutunnel_engine_running = 0;\n    anutunnel_udpgw_state = 0;\n    pthread_mutex_unlock(&g_lock);',
  "reset native UDPGW state on reconnect")
 p=root/"tools/native/badvpn/prepare.py"
 t=p.read_text()

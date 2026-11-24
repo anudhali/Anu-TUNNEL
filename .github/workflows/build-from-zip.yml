@@ -121,20 +121,16 @@ jobs:
           PY
           grep -q '.addDnsServer("10.111.0.2")' anu_tunnel/app/src/main/java/com/anutunnel/app/AnuVpnService.kt
           python3 anu_tunnel/tools/verify_source.py
-          grep -q "versionName '1.6.0'" anu_tunnel/app/build.gradle
-          mkdir -p patched-source-v1.6.0
-          cp -a anu_tunnel/app/src/main/java patched-source-v1.6.0/
-          cp -a anu_tunnel/app/src/main/assets patched-source-v1.6.0/
-          cp -a anu_tunnel/app/src/main/AndroidManifest.xml patched-source-v1.6.0/
-          cp -a anu_tunnel/app/build.gradle patched-source-v1.6.0/
-          cp -a anu_tunnel/tools patched-source-v1.6.0/
-          cp anu_tunnel/README.md anu_tunnel/BUILD_STATUS.md anu_tunnel/THIRD_PARTY_NOTICES.md patched-source-v1.6.0/
-          zip -qr Anu-TUNNEL-v1.6.0-source.zip patched-source-v1.6.0
-      - name: Upload patched v1.6.0 source
+          grep -q "versionName '1.7.0'" anu_tunnel/app/build.gradle
+          rm -rf Anu-TUNNEL-v1.7.0-source
+          cp -a anu_tunnel Anu-TUNNEL-v1.7.0-source
+          rm -rf Anu-TUNNEL-v1.7.0-source/.native-build
+          zip -qr Anu-TUNNEL-v1.7.0-source.zip Anu-TUNNEL-v1.7.0-source
+      - name: Upload full v1.7.0 project source
         uses: actions/upload-artifact@v4
         with:
-          name: Anu-TUNNEL-v1.6.0-source
-          path: Anu-TUNNEL-v1.6.0-source.zip
+          name: Anu-TUNNEL-v1.7.0-source
+          path: Anu-TUNNEL-v1.7.0-source.zip
           retention-days: 14
 
       - name: Align Java and Kotlin JVM targets
@@ -318,7 +314,7 @@ jobs:
       - name: Upload APK and native artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Anu-TUNNEL-Android-ARM64-v1.6.0
+          name: Anu-TUNNEL-Android-ARM64-v1.7.0
           path: anu_tunnel/release/*
           if-no-files-found: error
           retention-days: 14

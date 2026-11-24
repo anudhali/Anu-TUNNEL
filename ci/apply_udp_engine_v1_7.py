@@ -21,10 +21,16 @@ patch("app/src/main/java/com/anutunnel/app/AnuVpnService.kt",
  '"TCP forwarding works, but SSH server localhost:$udpgwPort is not reachable. Enable provider BadVPN UDPGW or set the correct port."',
  '"Provider UDPGW TCP port 127.0.0.1:$udpgwPort is not reachable through SSH. Ask your provider for the exact port and enable its compatible BadVPN UDPGW service."',
  "provider port diagnostic")
-patch("app/src/main/java/com/anutunnel/app/AnuVpnService.kt",
- 'publishState("CONNECTED", "SSH/DNSTT + BadVPN UDPGW · localhost:$udpgwPort reachable")',
- 'publishState("CONNECTED", "SSH/DNSTT + BadVPN UDPGW client started; remote UDP replies still require provider verification")',
- "truthful connected detail")
+# Replace the old optimistic detail regardless of the exact punctuation used by the prior patch.
+import re
+service_path=root/"app/src/main/java/com/anutunnel/app/AnuVpnService.kt"
+service_text=service_path.read_text()
+service_text, count = re.subn(r'publishState\("CONNECTED", "SSH/DNSTT \+ BadVPN UDPGW[^"]*"\)',
+    'publishState("CONNECTED", "SSH/DNSTT + BadVPN UDPGW client started; remote UDP replies still require provider verification")',
+    service_text, count=1)
+if count != 1: raise SystemExit("could not find previous optimistic UDPGW connected message")
+service_path.write_text(service_text)
+
 print("PASS: provider UDPGW port is no longer silently defaulted to 7300")
 
 

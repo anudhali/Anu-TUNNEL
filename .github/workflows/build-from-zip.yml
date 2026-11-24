@@ -105,6 +105,7 @@ jobs:
           print("Validated and extracted the four v1.6 engine integration sources")
           PY
           python3 ci/apply_engine_v1_6.py anu_tunnel
+          python3 ci/apply_udp_engine_v1_7.py
           python3 - <<'PY'
           from pathlib import Path
           p = Path("anu_tunnel/app/src/main/java/com/anutunnel/app/AnuVpnService.kt")

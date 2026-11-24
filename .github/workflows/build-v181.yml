@@ -1,0 +1,107 @@
+name: Anu TUNNEL v1.8.1 Android Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/final-integration
+    paths:
+      - 'Anu-TUNNEL-v1.8.1-source-update.zip'
+      - '.github/workflows/build-v181.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify and extract v1.8.1 source archive
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ZIP='Anu-TUNNEL-v1.8.1-source-update.zip'
+          test -s "$ZIP"
+          unzip -t "$ZIP"
+          mkdir -p "$RUNNER_TEMP/anu-source"
+          unzip -q "$ZIP" -d "$RUNNER_TEMP/anu-source"
+          PROJECT="$RUNNER_TEMP/anu-source/Anu-TUNNEL-v1.8.1-source"
+          test -f "$PROJECT/app/build.gradle"
+          test -f "$PROJECT/settings.gradle"
+          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.4'
+          cache: false
+
+      - name: Set up Android SDK and NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;27.3.13750724"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.3.13750724" >> "$GITHUB_ENV"
+
+      - name: Verify source package
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$PROJECT"
+          python3 tools/verify_source.py
+          bash -n tools/*.sh
+
+      - name: Build native Android libraries
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$PROJECT"
+          chmod +x tools/*.sh
+          bash tools/build_native.sh
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Assemble debug APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$PROJECT"
+          gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify and package APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$PROJECT"
+          APK='app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          mkdir -p "$RUNNER_TEMP/release"
+          cp "$APK" "$RUNNER_TEMP/release/Anu_TUNNEL-v1.8.1-debug.apk"
+          find app/src/main/jniLibs -type f -name '*.so' -exec cp {} "$RUNNER_TEMP/release/" \; 2>/dev/null || true
+          cp app/libs/*.aar "$RUNNER_TEMP/release/" 2>/dev/null || true
+          sha256sum "$RUNNER_TEMP/release"/* > "$RUNNER_TEMP/release/SHA256SUMS.txt"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Anu-TUNNEL-v1.8.1-Android
+          path: ${{ runner.temp }}/release/*
+          if-no-files-found: error
+          retention-days: 14

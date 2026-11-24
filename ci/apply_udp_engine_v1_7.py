@@ -159,6 +159,10 @@ patch("tools/native/badvpn/prepare.py",
  '    anutunnel_engine_running = 0;\n    pthread_mutex_unlock(&g_lock);',
  '    anutunnel_engine_running = 0;\n    anutunnel_udpgw_state = 0;\n    pthread_mutex_unlock(&g_lock);',
  "reset native UDPGW state on reconnect")
+patch("tools/native/badvpn/prepare.py",
+ 'extern volatile sig_atomic_t anutunnel_engine_running;',
+ 'extern volatile sig_atomic_t anutunnel_engine_running;\\nextern volatile sig_atomic_t anutunnel_udpgw_state;',
+ "declare native UDPGW state in JNI")
 
 patch("app/build.gradle", "versionCode 13", "versionCode 14", "v1.7 version code")
 patch("app/build.gradle", "versionName '1.6.0'", "versionName '1.7.0'", "v1.7 version name")

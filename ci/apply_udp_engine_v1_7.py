@@ -36,9 +36,9 @@ def inject(rel, old, new, label):
 
 prep=root/"tools/native/badvpn/prepare.py"
 t=prep.read_text()
-old='''        "volatile sig_atomic_t anutunnel_engine_running = 0;\\\\n\\\\n" + marker, 1)'''
-new='''        "volatile sig_atomic_t anutunnel_engine_running = 0;\\\\n"
-        "volatile sig_atomic_t anutunnel_udpgw_state = 0;\\\\n\\\\n" + marker, 1)'''
+old='''        "volatile sig_atomic_t anutunnel_engine_running = 0;\\n\\n" + marker, 1)'''
+new='''        "volatile sig_atomic_t anutunnel_engine_running = 0;\\n"
+        "volatile sig_atomic_t anutunnel_udpgw_state = 0;\\n\\n" + marker, 1)'''
 if old not in t:
  raise SystemExit("prepare.py UDPGW state-global anchor missing")
 prep.write_text(t.replace(old,new,1))

@@ -3,7 +3,7 @@ name: Anu TUNNEL Build from Uploaded ZIP
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, 'engine/**' ]
 
 permissions:
   contents: read
@@ -68,6 +68,69 @@ jobs:
         with:
           name: Anu-TUNNEL-v1.5.0-source
           path: Anu-TUNNEL-v1.5.0-source.zip
+          retention-days: 14
+      - name: Extract and apply Anu TUNNEL v1.6.0 BadVPN engine integration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import base64, gzip, io, tarfile
+          from pathlib import Path
+          encoded = Path("ci/v1.6-engine-sources.tar.gz.b64").read_text().strip()
+          required = {"ci/apply_engine_v1_6.py", "ci/prepare_badvpn.py", "ci/build_badvpn_android.sh", "ci/BADVPN-COPYING.txt"}
+          candidates = [encoded]
+          # Recover a single accidental extra Base64 character only when the candidate
+          # decompresses and contains the exact four expected, safe tar entries.
+          if len(encoded) % 4:
+              candidates = (encoded[:i] + encoded[i+1:] for i in range(len(encoded)))
+          recovered = None
+          for candidate in candidates:
+              try:
+                  compressed = base64.b64decode(candidate, validate=True)
+                  archive = gzip.decompress(compressed)
+                  with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as tf:
+                      names = {m.name for m in tf.getmembers() if m.isfile()}
+                      if not required.issubset(names):
+                          continue
+                      if any(m.name.startswith("/") or ".." in Path(m.name).parts for m in tf.getmembers()):
+                          continue
+                      recovered = archive
+                      break
+              except Exception:
+                  continue
+          if recovered is None:
+              raise SystemExit("v1.6 engine source archive failed Base64/gzip/tar integrity checks")
+          with tarfile.open(fileobj=io.BytesIO(recovered), mode="r:") as tf:
+              tf.extractall(path=".", members=[m for m in tf.getmembers() if m.name in required])
+          print("Validated and extracted the four v1.6 engine integration sources")
+          PY
+          python3 ci/apply_engine_v1_6.py anu_tunnel
+          python3 ci/apply_udp_engine_v1_7.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("anu_tunnel/app/src/main/java/com/anutunnel/app/AnuVpnService.kt")
+          source = p.read_text()
+          old = '.addDnsServer("198.18.0.2")'
+          new = '.addDnsServer("10.111.0.2")'
+          if old in source:
+              source = source.replace(old, new, 1)
+              p.write_text(source)
+          elif new not in source:
+              raise SystemExit("UDP Gateway DNS target does not match BadVPN --netif-ipaddr")
+          print("Aligned Android DNS target with BadVPN TUN address for transparent UDPGW DNS")
+          PY
+          grep -q '.addDnsServer("10.111.0.2")' anu_tunnel/app/src/main/java/com/anutunnel/app/AnuVpnService.kt
+          python3 anu_tunnel/tools/verify_source.py
+          grep -q "versionName '1.7.0'" anu_tunnel/app/build.gradle
+          rm -rf Anu-TUNNEL-v1.7.0-source
+          cp -a anu_tunnel Anu-TUNNEL-v1.7.0-source
+          rm -rf Anu-TUNNEL-v1.7.0-source/.native-build
+          zip -qr Anu-TUNNEL-v1.7.0-source.zip Anu-TUNNEL-v1.7.0-source
+      - name: Upload full v1.7.0 project source
+        uses: actions/upload-artifact@v4
+        with:
+          name: Anu-TUNNEL-v1.7.0-source
+          path: Anu-TUNNEL-v1.7.0-source.zip
           retention-days: 14
 
       - name: Align Java and Kotlin JVM targets
@@ -213,6 +276,13 @@ jobs:
           cp "$GITHUB_WORKSPACE/anu_tunnel/Application.mk" "$WORK/hev-socks5-tunnel/Application.mk"
           "$ANDROID_NDK_HOME/ndk-build" NDK_PROJECT_PATH="$WORK/hev-socks5-tunnel" APP_BUILD_SCRIPT="$WORK/hev-socks5-tunnel/Android.mk" APP_ABI=arm64-v8a APP_PLATFORM=android-24 NDK_LIBS_OUT="$GITHUB_WORKSPACE/anu_tunnel/app/src/main/jniLibs" NDK_OUT="$WORK/hev-obj"
           test -s "$GITHUB_WORKSPACE/anu_tunnel/app/src/main/jniLibs/arm64-v8a/libhev-socks5-tunnel.so"
+      - name: Build BadVPN ARM64 tun2socks and UDPGW JNI engine
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cmake --version
+          bash anu_tunnel/tools/build_badvpn_android.sh
+          test -s anu_tunnel/app/src/main/jniLibs/arm64-v8a/libanutunnel-badvpn.so
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -232,17 +302,19 @@ jobs:
           test -s "$APK"
           test -s app/libs/dnstt.aar
           test -s app/src/main/jniLibs/arm64-v8a/libhev-socks5-tunnel.so
+          test -s app/src/main/jniLibs/arm64-v8a/libanutunnel-badvpn.so
           mkdir -p release
           cp "$APK" release/Anu_TUNNEL-debug.apk
           cp app/libs/dnstt.aar release/
           cp app/src/main/jniLibs/arm64-v8a/libhev-socks5-tunnel.so release/
+          cp app/src/main/jniLibs/arm64-v8a/libanutunnel-badvpn.so release/
           sha256sum release/* | tee release/SHA256SUMS.txt
         working-directory: anu_tunnel
 
       - name: Upload APK and native artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Anu-TUNNEL-Android-ARM64
+          name: Anu-TUNNEL-Android-ARM64-v1.7.0
           path: anu_tunnel/release/*
           if-no-files-found: error
           retention-days: 14

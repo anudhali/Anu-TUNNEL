@@ -84,6 +84,24 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Align Java and Kotlin JVM targets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$PROJECT"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("app/build.gradle")
+          s = p.read_text()
+          marker = "android {\\n"
+          if marker not in s:
+              raise SystemExit("Could not find android block in app/build.gradle")
+          if "sourceCompatibility JavaVersion.VERSION_17" not in s:
+              s = s.replace(marker, marker + "    compileOptions {\\n        sourceCompatibility JavaVersion.VERSION_17\\n        targetCompatibility JavaVersion.VERSION_17\\n    }\\n    kotlinOptions {\\n        jvmTarget = '17'\\n    }\\n", 1)
+          p.write_text(s)
+          print("Configured Java and Kotlin JVM target 17")
+          PY
+
       - name: Assemble debug APK
         shell: bash
         run: |

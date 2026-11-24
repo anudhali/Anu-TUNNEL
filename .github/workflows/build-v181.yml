@@ -93,11 +93,11 @@ jobs:
           from pathlib import Path
           p = Path("app/build.gradle")
           s = p.read_text()
-          marker = "android {\\n"
+          marker = "android {\n"
           if marker not in s:
               raise SystemExit("Could not find android block in app/build.gradle")
           if "sourceCompatibility JavaVersion.VERSION_17" not in s:
-              s = s.replace(marker, marker + "    compileOptions {\\n        sourceCompatibility JavaVersion.VERSION_17\\n        targetCompatibility JavaVersion.VERSION_17\\n    }\\n    kotlinOptions {\\n        jvmTarget = '17'\\n    }\\n", 1)
+              s = s.replace(marker, marker + "    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n    kotlinOptions {\n        jvmTarget = '17'\n    }\n", 1)
           p.write_text(s)
           print("Configured Java and Kotlin JVM target 17")
           PY

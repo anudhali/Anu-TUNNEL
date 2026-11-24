@@ -153,11 +153,6 @@ patch("app/src/main/java/com/anutunnel/app/MainActivity.kt",
  '    private fun requestVpnFor(config: TunnelConfig) {\n        val credentials = config.account.split(":", limit = 2)',
  '    private fun requestVpnFor(config: TunnelConfig) {\n        if (!config.udpgwPortConfigured || config.udpgwPort !in 1..65535) {\n            toast("Ask your SSH provider for the exact BadVPN UDPGW TCP port, then save it in this profile.")\n            showEditor(config)\n            return\n        }\n        val credentials = config.account.split(":", limit = 2)',
  "block unconfirmed provider port")
-patch("app/src/main/java/com/anutunnel/app/MainActivity.kt",
- 'item.addView(label("\${config.connectionType}\\nSSH: $safeAccount\\nDNS: \${config.udpDns}\\nSNI: \${config.serverName}\\nUDP Gateway: \${config.udpgwPort}", 12f))',
- 'item.addView(label("\${config.connectionType}\\nSSH: $safeAccount\\nDNS: \${config.udpDns}\\nSNI: \${config.serverName}\\nProvider UDPGW TCP Port: \${if (config.udpgwPortConfigured) config.udpgwPort.toString() else "Not configured"}", 12f))',
- "show confirmed port status")
-
 # Reset native relay state on each fresh engine session.
 patch("tools/native/badvpn/prepare.py",
  '    anutunnel_engine_running = 0;\\n    pthread_mutex_unlock(&g_lock);',
